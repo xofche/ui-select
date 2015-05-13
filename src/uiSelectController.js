@@ -77,6 +77,7 @@ uis.controller('uiSelectCtrl',
       if(!avoidReset) _resetSearchInput();
 
       $scope.$broadcast('uis:activate');
+      $scope.$emit('angular.ui.select.activate');
 
       ctrl.open = true;
 
