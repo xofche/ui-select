@@ -1,7 +1,7 @@
 'use strict';
 
 describe('ui-select tests', function() {
-  var scope, $rootScope, $compile, $timeout, $injector;
+  var scope, $rootScope, $compile, $timeout, $injector, uisRepeatParser;
 
   var Key = {
     Enter: 13,
@@ -32,7 +32,7 @@ describe('ui-select tests', function() {
       link: function (scope, element, attrs, ctrl) {
 
       }
-    }
+    };
 
   });
 
@@ -48,17 +48,25 @@ describe('ui-select tests', function() {
     });
   });
 
-  beforeEach(inject(function(_$rootScope_, _$compile_, _$timeout_, _$injector_) {
+  beforeEach(inject(function(_$rootScope_, _$compile_, _$timeout_, _$injector_, _uisRepeatParser_) {
     $rootScope = _$rootScope_;
     scope = $rootScope.$new();
     $compile = _$compile_;
     $timeout = _$timeout_;
     $injector = _$injector_;
+    uisRepeatParser = _uisRepeatParser_;
     scope.selection = {};
 
     scope.getGroupLabel = function(person) {
       return person.age % 2 ? 'even' : 'odd';
     };
+
+    scope.filterInvertOrder = function(groups) {
+      return groups.sort(function(groupA, groupB){
+        return groupA.name.toLocaleLowerCase() < groupB.name.toLocaleLowerCase();
+      });
+    };
+
 
     scope.people = [
       { name: 'Adam',      email: 'adam@email.com',      group: 'Foo', age: 12 },
@@ -70,6 +78,19 @@ describe('ui-select tests', function() {
       { name: 'Nicole',    email: 'nicole@email.com',    group: 'bar', age: 43 },
       { name: 'Natasha',   email: 'natasha@email.com',   group: 'Baz', age: 54 }
     ];
+
+    scope.peopleObj = {
+      '1' : { name: 'Adam',      email: 'adam@email.com',      age: 12, country: 'United States' },
+      '2' : { name: 'Amalie',    email: 'amalie@email.com',    age: 12, country: 'Argentina' },
+      '3' : { name: 'Estefanía', email: 'estefania@email.com', age: 21, country: 'Argentina' },
+      '4' : { name: 'Adrian',    email: 'adrian@email.com',    age: 21, country: 'Ecuador' },
+      '5' : { name: 'Wladimir',  email: 'wladimir@email.com',  age: 30, country: 'Ecuador' },
+      '6' : { name: 'Samantha',  email: 'samantha@email.com',  age: 30, country: 'United States' },
+      '7' : { name: 'Nicole',    email: 'nicole@email.com',    age: 43, country: 'Colombia' },
+      '8' : { name: 'Natasha',   email: 'natasha@email.com',   age: 54, country: 'Ecuador' },
+      '9' : { name: 'Michael',   email: 'michael@email.com',   age: 15, country: 'Colombia' },
+      '10' : { name: 'Nicolás',   email: 'nicolas@email.com',    age: 43, country: 'Colombia' }
+    };
 
     scope.someObject = {};
     scope.someObject.people = [
@@ -104,8 +125,9 @@ describe('ui-select tests', function() {
       if (attrs.tagging !== undefined) { attrsHtml += ' tagging="' + attrs.tagging + '"'; }
       if (attrs.taggingTokens !== undefined) { attrsHtml += ' tagging-tokens="' + attrs.taggingTokens + '"'; }
       if (attrs.title !== undefined) { attrsHtml += ' title="' + attrs.title + '"'; }
-      if (attrs.appendToBody != undefined) { attrsHtml += ' append-to-body="' + attrs.appendToBody + '"'; }
-      if (attrs.allowClear != undefined) { matchAttrsHtml += ' allow-clear="' + attrs.allowClear + '"';}
+      if (attrs.appendToBody !== undefined) { attrsHtml += ' append-to-body="' + attrs.appendToBody + '"'; }
+      if (attrs.allowClear !== undefined) { matchAttrsHtml += ' allow-clear="' + attrs.allowClear + '"';}
+      if (attrs.inputId !== undefined) { attrsHtml += ' input-id="' + attrs.inputId + '"'; }
     }
 
     return compileTemplate(
@@ -151,15 +173,23 @@ describe('ui-select tests', function() {
     e.keyCode = keyCode;
     element.trigger(e);
   }
-  function triggerPaste(element, text) {
+  function triggerPaste(element, text, isClipboardEvent) {
     var e = jQuery.Event("paste");
-    e.originalEvent = {
+    if (isClipboardEvent) {
+      e.clipboardData = {
+        getData : function() {
+            return text;
+        }
+      };
+    } else {
+      e.originalEvent = {
         clipboardData : {
             getData : function() {
                 return text;
             }
         }
-    };
+      };
+    }
     element.trigger(e);
   }
 
@@ -173,7 +203,7 @@ describe('ui-select tests', function() {
     var $select = el.scope().$select;
     $select.open = true;
     scope.$digest();
-  };
+  }
 
   function closeDropdown(el) {
     var $select = el.scope().$select;
@@ -183,6 +213,139 @@ describe('ui-select tests', function() {
 
 
   // Tests
+  //uisRepeatParser
+
+  it('should parse simple repeat syntax', function() {
+
+    var locals = {};
+    locals.people = [{name: 'Wladimir'}, {name: 'Samantha'}];
+    locals.person = locals.people[0];
+
+    var parserResult = uisRepeatParser.parse('person in people');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+    var ngExp = parserResult.repeatExpression(false);
+    expect(ngExp).toBe('person in $select.items');
+
+    var ngExpGrouped = parserResult.repeatExpression(true);
+    expect(ngExpGrouped).toBe('person in $group.items');
+
+  });
+
+  it('should parse simple repeat syntax', function() {
+
+    var locals = {};
+    locals.people = [{name: 'Wladimir'}, {name: 'Samantha'}];
+    locals.person = locals.people[0];
+
+    var parserResult = uisRepeatParser.parse('person.name as person in people');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+  });
+
+  it('should parse simple property binding repeat syntax', function() {
+
+    var locals = {};
+    locals.people = [{name: 'Wladimir'}, {name: 'Samantha'}];
+    locals.person = locals.people[0];
+
+    var parserResult = uisRepeatParser.parse('person.name as person in people');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+  });
+
+  it('should parse simple property binding repeat syntax with a basic filter', function () {
+
+    var locals = {};
+    locals.people = [{ name: 'Wladimir' }, { name: 'Samantha' }];
+    locals.person = locals.people[1];
+
+    var parserResult = uisRepeatParser.parse('person.name as person in people | filter: { name: \'Samantha\' }');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    expect(parserResult.source(locals)).toEqual([locals.person]);
+
+  });
+
+  it('should parse simple property binding repeat syntax with track by', function () {
+
+    var locals = {};
+    locals.people = [{ name: 'Wladimir' }, { name: 'Samantha' }];
+    locals.person = locals.people[0];
+
+    var parserResult = uisRepeatParser.parse('person.name as person in people track by person.name');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+  });
+
+  it('should parse (key, value) repeat syntax', function() {
+
+    var locals = {};
+    locals.people = { 'WC' : {name: 'Wladimir'}, 'SH' : {name: 'Samantha'}};
+    locals.person = locals.people[0];
+
+    var parserResult = uisRepeatParser.parse('(key,person) in people');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.keyName).toBe('key');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+    var ngExp = parserResult.repeatExpression(false);
+    expect(ngExp).toBe('person in $select.items');
+
+    var ngExpGrouped = parserResult.repeatExpression(true);
+    expect(ngExpGrouped).toBe('person in $group.items');
+
+  });
+
+  it('should parse simple property binding with (key, value) repeat syntax', function() {
+
+    var locals = {};
+    locals.people = { 'WC' : {name: 'Wladimir'}, 'SH' : {name: 'Samantha'}};
+    locals.person = locals.people['WC'];
+
+    var parserResult = uisRepeatParser.parse('person.name as (key, person) in people');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.keyName).toBe('key');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    expect(parserResult.source(locals)).toBe(locals.people);
+
+  });
+
+  it('should should accept a "collection expresion" only if its not (key, value) repeat syntax', function() {
+
+    var locals = {};
+    locals.people = { 'WC' : {name: 'Wladimir'}, 'SH' : {name: 'Samantha'}};
+    locals.person = locals.people['WC'];
+
+    var parserResult = uisRepeatParser.parse('person.name as person in (peopleNothing || people)');
+    expect(parserResult.itemName).toBe('person');
+    expect(parserResult.modelMapper(locals)).toBe(locals.person.name);
+    // expect(parserResult.source(locals)).toBe(locals.people);
+
+  });
+
+  it('should should throw if "collection expresion" used and (key, value) repeat syntax', function() {
+
+    var locals = {};
+    locals.people = { 'WC' : {name: 'Wladimir'}, 'SH' : {name: 'Samantha'}};
+    locals.person = locals.people['WC'];
+
+    function errorFunctionWrapper(){
+      uisRepeatParser.parse('person.name as (key,person) in (people | someFilter)');
+    }
+
+    expect(errorFunctionWrapper).toThrow();
+
+  });
 
   it('should compile child directives', function() {
     var el = createUiSelect();
@@ -211,7 +374,7 @@ describe('ui-select tests', function() {
 
     expect(getMatchLabel(el)).toEqual('Adam');
   });
-  
+
   it('should correctly render initial state with track by feature', function() {
     var el = compileTemplate(
       '<ui-select ng-model="selection.selected"> \
@@ -319,13 +482,13 @@ describe('ui-select tests', function() {
   it('should toggle allow-clear directive', function() {
     scope.selection.selected = scope.people[0];
     scope.isClearAllowed = false;
-    
+
     var el = createUiSelect({theme : 'select2', allowClear: '{{isClearAllowed}}'});
     var $select = el.scope().$select;
 
     expect($select.allowClear).toEqual(false);
     expect(el.find('.select2-search-choice-close').length).toEqual(0);
-    
+
     // Turn clear on
     scope.isClearAllowed = true;
     scope.$digest();
@@ -460,6 +623,88 @@ describe('ui-select tests', function() {
 
     el1.remove();
     el2.remove();
+  });
+
+  it('should bind model correctly (with object as source)', function() {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.value.name}}</ui-select-match> \
+        <ui-select-choices repeat="person.value as (key,person) in peopleObj | filter: $select.search"> \
+          <div ng-bind-html="person.value.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.value.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    // scope.selection.selected = 'Samantha';
+
+    clickItem(el, 'Samantha');
+    scope.$digest();
+    expect(getMatchLabel(el)).toEqual('Samantha');
+    expect(scope.selection.selected).toBe(scope.peopleObj[6]);
+
+  });
+
+  it('should bind model correctly (with object as source) using a single property', function() {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.value.name}}</ui-select-match> \
+        <ui-select-choices repeat="person.value.name as (key,person) in peopleObj | filter: $select.search"> \
+          <div ng-bind-html="person.value.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.value.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    // scope.selection.selected = 'Samantha';
+
+    clickItem(el, 'Samantha');
+    scope.$digest();
+    expect(getMatchLabel(el)).toEqual('Samantha');
+    expect(scope.selection.selected).toBe('Samantha');
+
+  });
+
+  it('should update choices when original source changes (with object as source)', function() {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.value.name}}</ui-select-match> \
+        <ui-select-choices repeat="person.value.name as (key,person) in peopleObj | filter: $select.search"> \
+          <div ng-bind-html="person.value.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.value.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+
+    scope.$digest();
+
+    openDropdown(el);
+    var choicesEls = $(el).find('.ui-select-choices-row');
+    expect(choicesEls.length).toEqual(10);
+
+    scope.peopleObj['11'] = { name: 'Camila',   email: 'camila@email.com',    age: 1, country: 'Ecuador' };
+    scope.$digest();
+
+    choicesEls = $(el).find('.ui-select-choices-row');
+    expect(choicesEls.length).toEqual(11);
+
+  });
+
+  it('should bind model correctly (with object as source) using the key of collection', function() {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.value.name}}</ui-select-match> \
+        <ui-select-choices repeat="person.key as (key,person) in peopleObj | filter: $select.search"> \
+          <div ng-bind-html="person.value.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.value.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    // scope.selection.selected = 'Samantha';
+
+    clickItem(el, 'Samantha');
+    scope.$digest();
+    expect(getMatchLabel(el)).toEqual('Samantha');
+    expect(scope.selection.selected).toBe('6');
+
   });
 
   describe('disabled options', function() {
@@ -702,6 +947,46 @@ describe('ui-select tests', function() {
     });
   });
 
+  describe('choices group filter function', function() {
+    function createUiSelect() {
+      return compileTemplate('\
+        <ui-select ng-model="selection.selected"> \
+          <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+          <ui-select-choices group-by="\'group\'" group-filter="filterInvertOrder"  repeat="person in people | filter: $select.search"> \
+            <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          </ui-select-choices> \
+        </ui-select>'
+      );
+    }
+    it("should sort groups using filter", function () {
+      var el = createUiSelect();
+      expect(el.find('.ui-select-choices-group .ui-select-choices-group-label').map(function() {
+        return this.textContent;
+      }).toArray()).toEqual(["Foo", "Baz", "bar"]);
+    });
+  });
+
+  describe('choices group filter array', function() {
+    function createUiSelect() {
+      return compileTemplate('\
+        <ui-select ng-model="selection.selected"> \
+          <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+          <ui-select-choices group-by="\'group\'" group-filter="[\'Foo\']" \
+              repeat="person in people | filter: $select.search"> \
+            <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          </ui-select-choices> \
+        </ui-select>'
+      );
+    }
+    it("should sort groups using filter", function () {
+      var el = createUiSelect();
+      expect(el.find('.ui-select-choices-group .ui-select-choices-group-label').map(function() {
+        return this.textContent;
+      }).toArray()).toEqual(["Foo"]);
+    });
+  });
+
+
   it('should throw when no ui-select-choices found', function() {
     expect(function() {
       compileTemplate(
@@ -716,6 +1001,7 @@ describe('ui-select tests', function() {
     expect(function() {
       compileTemplate(
         '<ui-select ng-model="selection.selected"> \
+          <ui-select-match></ui-select-match> \
           <ui-select-choices></ui-select-choices> \
         </ui-select>'
       );
@@ -912,35 +1198,6 @@ describe('ui-select tests', function() {
 
   });
 
-  it('should invoke hover callback', function(){
-
-    var highlighted;
-    scope.onHighlightFn = function ($item) {
-      highlighted = $item;
-    };
-
-    var el = compileTemplate(
-      '<ui-select on-select="onSelectFn($item, $model)" ng-model="selection.selected"> \
-        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
-        <ui-select-choices on-highlight="onHighlightFn(person)" repeat="person.name as person in people | filter: $select.search"> \
-          <div ng-bind-html="person.name | highlight: $select.search"></div> \
-          <div ng-bind-html="person.email | highlight: $select.search"></div> \
-        </ui-select-choices> \
-      </ui-select>'
-    );
-
-    expect(highlighted).toBeFalsy();
-
-    if (!isDropdownOpened(el)){
-      openDropdown(el);
-    }
-
-    $(el).find('.ui-select-choices-row div:contains("Samantha")').trigger('mouseover');
-    scope.$digest();
-
-    expect(highlighted).toBe(scope.people[5]);
-  })
-
   it('should set $item & $model correctly when invoking callback on select and no single prop. binding', function () {
 
     scope.onSelectFn = function ($item, $model, $label) {
@@ -1023,6 +1280,58 @@ describe('ui-select tests', function() {
 
     expect(scope.$item).toBe(scope.people[5]);
     expect(scope.$model).toBe(scope.$item);
+  });
+
+  it('should allow creating tag in single select mode with tagging enabled', function() {
+
+    scope.taggingFunc = function (name) {
+      return name;
+    };
+
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected" tagging="taggingFunc" tagging-label="false"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search"> \
+          <div ng-bind-html="person.name" | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+
+    clickMatch(el);
+
+    var searchInput = el.find('.ui-select-search');
+
+    setSearchText(el, 'idontexist');
+
+    triggerKeydown(searchInput, Key.Enter);
+
+    expect($(el).scope().$select.selected).toEqual('idontexist');
+  });
+
+  it('should allow creating tag on ENTER in multiple select mode with tagging enabled, no labels', function() {
+
+    scope.taggingFunc = function (name) {
+      return name;
+    };
+
+    var el = compileTemplate(
+        '<ui-select multiple ng-model="selection.selected" tagging="taggingFunc" tagging-label="false"> \
+          <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+          <ui-select-choices repeat="person in people | filter: $select.search"> \
+            <div ng-bind-html="person.name" | highlight: $select.search"></div> \
+            <div ng-bind-html="person.email | highlight: $select.search"></div> \
+          </ui-select-choices> \
+        </ui-select>'
+    );
+
+    var searchInput = el.find('.ui-select-search');
+
+    setSearchText(el, 'idontexist');
+
+    triggerKeydown(searchInput, Key.Enter);
+
+    expect($(el).scope().$select.selected).toEqual(['idontexist']);
   });
 
   it('should append/transclude content (with correct scope) that users add at <match> tag', function () {
@@ -1124,7 +1433,38 @@ describe('ui-select tests', function() {
 
   });
 
-  it('should format view value correctly when using single property binding and refresh funcion', function () {
+  it('should call refresh function respecting minimum input length option', function () {
+
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match> \
+        </ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search" \
+          refresh="fetchFromServer($select.search)" refresh-delay="0" minimum-input-length="3"> \
+          <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-if="person.name==\'Wladimir\'"> \
+            <span class="only-once">I should appear only once</span>\
+          </div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+
+    scope.fetchFromServer = function(){};
+
+    spyOn(scope, 'fetchFromServer');
+
+    el.scope().$select.search = 'r';
+    scope.$digest();
+    $timeout.flush();
+    expect(scope.fetchFromServer).not.toHaveBeenCalledWith('r');
+
+    el.scope().$select.search = 'red';
+    scope.$digest();
+    $timeout.flush();
+    expect(scope.fetchFromServer).toHaveBeenCalledWith('red');
+  });
+
+  it('should format view value correctly when using single property binding and refresh function', function () {
 
     var el = compileTemplate(
       '<ui-select ng-model="selection.selected"> \
@@ -1142,7 +1482,7 @@ describe('ui-select tests', function() {
     scope.fetchFromServer = function(searching){
 
       if (searching == 's')
-        return scope.people
+        return scope.people;
 
       if (searching == 'o'){
         scope.people = []; //To simulate cases were previously selected item isnt in the list anymore
@@ -1150,11 +1490,11 @@ describe('ui-select tests', function() {
 
     };
 
-    setSearchText(el, 'r')
+    setSearchText(el, 'r');
     clickItem(el, 'Samantha');
     expect(getMatchLabel(el)).toBe('Samantha');
 
-    setSearchText(el, 'o')
+    setSearchText(el, 'o');
     expect(getMatchLabel(el)).toBe('Samantha');
 
   });
@@ -1233,6 +1573,7 @@ describe('ui-select tests', function() {
             if (attrs.closeOnSelect !== undefined) { attrsHtml += ' close-on-select="' + attrs.closeOnSelect + '"'; }
             if (attrs.tagging !== undefined) { attrsHtml += ' tagging="' + attrs.tagging + '"'; }
             if (attrs.taggingTokens !== undefined) { attrsHtml += ' tagging-tokens="' + attrs.taggingTokens + '"'; }
+            if (attrs.inputId !== undefined) { attrsHtml += ' input-id="' + attrs.inputId + '"'; }
         }
 
         return compileTemplate(
@@ -1329,7 +1670,7 @@ describe('ui-select tests', function() {
 
     });
 
-    it('should remove hightlighted match when pressing BACKSPACE key from search and decrease activeMatchIndex', function() {
+    it('should remove highlighted match when pressing BACKSPACE key from search and decrease activeMatchIndex', function() {
 
         scope.selection.selectedMultiple = [scope.people[4], scope.people[5], scope.people[6]]; //Wladimir, Samantha & Nicole
         var el = createUiSelectMultiple();
@@ -1345,7 +1686,7 @@ describe('ui-select tests', function() {
 
     });
 
-    it('should remove hightlighted match when pressing DELETE key from search and keep same activeMatchIndex', function() {
+    it('should remove highlighted match when pressing DELETE key from search and keep same activeMatchIndex', function() {
 
         scope.selection.selectedMultiple = [scope.people[4], scope.people[5], scope.people[6]]; //Wladimir, Samantha & Nicole
         var el = createUiSelectMultiple();
@@ -1380,13 +1721,13 @@ describe('ui-select tests', function() {
         var searchInput = el.find('.ui-select-search');
 
         expect(isDropdownOpened(el)).toEqual(false);
-        triggerKeydown(searchInput, Key.Left)
-        triggerKeydown(searchInput, Key.Left)
+        triggerKeydown(searchInput, Key.Left);
+        triggerKeydown(searchInput, Key.Left);
         expect(isDropdownOpened(el)).toEqual(false);
         expect(el.scope().$selectMultiple.activeMatchIndex).toBe(el.scope().$select.selected.length - 2);
-        triggerKeydown(searchInput, Key.Left)
-        triggerKeydown(searchInput, Key.Left)
-        triggerKeydown(searchInput, Key.Left)
+        triggerKeydown(searchInput, Key.Left);
+        triggerKeydown(searchInput, Key.Left);
+        triggerKeydown(searchInput, Key.Left);
         expect(el.scope().$selectMultiple.activeMatchIndex).toBe(0);
 
     });
@@ -1397,9 +1738,9 @@ describe('ui-select tests', function() {
         var el = createUiSelectMultiple();
         var searchInput = el.find('.ui-select-search');
 
-        el.scope().$selectMultiple.activeMatchIndex = 3
-        triggerKeydown(searchInput, Key.Left)
-        triggerKeydown(searchInput, Key.Left)
+        el.scope().$selectMultiple.activeMatchIndex = 3;
+        triggerKeydown(searchInput, Key.Left);
+        triggerKeydown(searchInput, Key.Left);
         expect(el.scope().$selectMultiple.activeMatchIndex).toBe(1);
 
     });
@@ -1410,9 +1751,9 @@ describe('ui-select tests', function() {
         var el = createUiSelectMultiple();
         var searchInput = el.find('.ui-select-search');
 
-        el.scope().$selectMultiple.activeMatchIndex = 0
-        triggerKeydown(searchInput, Key.Right)
-        triggerKeydown(searchInput, Key.Right)
+        el.scope().$selectMultiple.activeMatchIndex = 0;
+        triggerKeydown(searchInput, Key.Right);
+        triggerKeydown(searchInput, Key.Right);
         expect(el.scope().$selectMultiple.activeMatchIndex).toBe(2);
 
     });
@@ -1424,7 +1765,7 @@ describe('ui-select tests', function() {
         var searchInput = el.find('.ui-select-search');
 
         expect(isDropdownOpened(el)).toEqual(false);
-        triggerKeydown(searchInput, Key.Down)
+        triggerKeydown(searchInput, Key.Down);
         expect(isDropdownOpened(el)).toEqual(true);
 
     });
@@ -1459,7 +1800,7 @@ describe('ui-select tests', function() {
         var searchInput = el.find('.ui-select-search');
 
         expect(isDropdownOpened(el)).toEqual(false);
-        triggerKeydown(searchInput, Key.Down)
+        triggerKeydown(searchInput, Key.Down);
         expect(isDropdownOpened(el)).toEqual(true);
 
         clickItem(el, 'Wladimir');
@@ -1475,7 +1816,7 @@ describe('ui-select tests', function() {
         var searchInput = el.find('.ui-select-search');
 
         expect(isDropdownOpened(el)).toEqual(false);
-        triggerKeydown(searchInput, Key.Down)
+        triggerKeydown(searchInput, Key.Down);
         expect(isDropdownOpened(el)).toEqual(true);
 
         clickItem(el, 'Wladimir');
@@ -1491,9 +1832,9 @@ describe('ui-select tests', function() {
         var searchInput = el.find('.ui-select-search');
 
         expect(isDropdownOpened(el)).toEqual(false);
-        triggerKeydown(searchInput, Key.Down)
+        triggerKeydown(searchInput, Key.Down);
         expect(isDropdownOpened(el)).toEqual(true);
-        triggerKeydown(searchInput, Key.Escape)
+        triggerKeydown(searchInput, Key.Escape);
         expect(isDropdownOpened(el)).toEqual(false);
 
     });
@@ -1504,9 +1845,37 @@ describe('ui-select tests', function() {
         var el = createUiSelectMultiple();
         var searchInput = el.find('.ui-select-search');
 
-        triggerKeydown(searchInput, Key.Down)
-        triggerKeydown(searchInput, Key.Enter)
+        triggerKeydown(searchInput, Key.Down);
+        triggerKeydown(searchInput, Key.Enter);
         expect(scope.selection.selectedMultiple.length).toEqual(2);
+
+    });
+
+    it('should stop the propagation when pressing ENTER key from dropdown', function() {
+
+        var el = createUiSelectMultiple();
+        var searchInput = el.find('.ui-select-search');
+        spyOn(jQuery.Event.prototype, 'preventDefault');
+        spyOn(jQuery.Event.prototype, 'stopPropagation');
+
+        triggerKeydown(searchInput, Key.Down);
+        triggerKeydown(searchInput, Key.Enter);
+        expect(jQuery.Event.prototype.preventDefault).toHaveBeenCalled();
+        expect(jQuery.Event.prototype.stopPropagation).toHaveBeenCalled();
+
+    });
+
+    it('should stop the propagation when pressing ESC key from dropdown', function() {
+
+        var el = createUiSelectMultiple();
+        var searchInput = el.find('.ui-select-search');
+        spyOn(jQuery.Event.prototype, 'preventDefault');
+        spyOn(jQuery.Event.prototype, 'stopPropagation');
+
+        triggerKeydown(searchInput, Key.Down);
+        triggerKeydown(searchInput, Key.Escape);
+        expect(jQuery.Event.prototype.preventDefault).toHaveBeenCalled();
+        expect(jQuery.Event.prototype.stopPropagation).toHaveBeenCalled();
 
     });
 
@@ -1517,9 +1886,9 @@ describe('ui-select tests', function() {
 
         triggerKeydown(searchInput, Key.Down); //Open dropdown
 
-        el.scope().$select.activeIndex = 0
-        triggerKeydown(searchInput, Key.Down)
-        triggerKeydown(searchInput, Key.Down)
+        el.scope().$select.activeIndex = 0;
+        triggerKeydown(searchInput, Key.Down);
+        triggerKeydown(searchInput, Key.Down);
         expect(el.scope().$select.activeIndex).toBe(2);
 
     });
@@ -1531,9 +1900,9 @@ describe('ui-select tests', function() {
 
         triggerKeydown(searchInput, Key.Down); //Open dropdown
 
-        el.scope().$select.activeIndex = 5
-        triggerKeydown(searchInput, Key.Up)
-        triggerKeydown(searchInput, Key.Up)
+        el.scope().$select.activeIndex = 5;
+        triggerKeydown(searchInput, Key.Up);
+        triggerKeydown(searchInput, Key.Up);
         expect(el.scope().$select.activeIndex).toBe(3);
 
     });
@@ -1586,7 +1955,7 @@ describe('ui-select tests', function() {
 
     });
 
-    it('should format view value correctly when using single property binding and refresh funcion', function () {
+    it('should format view value correctly when using single property binding and refresh function', function () {
 
       scope.selection.selectedMultiple = ['wladimir@email.com', 'samantha@email.com'];
 
@@ -1606,7 +1975,7 @@ describe('ui-select tests', function() {
       scope.fetchFromServer = function(searching){
 
         if (searching == 'n')
-          return scope.people
+          return scope.people;
 
         if (searching == 'o'){
           scope.people = []; //To simulate cases were previously selected item isnt in the list anymore
@@ -1614,47 +1983,80 @@ describe('ui-select tests', function() {
 
       };
 
-      setSearchText(el, 'n')
+      setSearchText(el, 'n');
       clickItem(el, 'Nicole');
 
       expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
         .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>Nicole <nicole@email.com>");
 
-      setSearchText(el, 'o')
+      setSearchText(el, 'o');
 
       expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
         .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>Nicole <nicole@email.com>");
 
     });
 
-    it('should watch changes for $select.selected and update formatted value correctly', function () {
+      it('should watch changes for $select.selected and update formatted value correctly', function () {
 
-      scope.selection.selectedMultiple = ['wladimir@email.com', 'samantha@email.com'];
+          scope.selection.selectedMultiple = ['wladimir@email.com', 'samantha@email.com'];
 
-      var el = compileTemplate(
-          '<ui-select multiple ng-model="selection.selectedMultiple" theme="bootstrap" style="width: 800px;"> \
-              <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
-              <ui-select-choices repeat="person.email as person in people | filter: $select.search"> \
-                <div ng-bind-html="person.name | highlight: $select.search"></div> \
-                <div ng-bind-html="person.email | highlight: $select.search"></div> \
-              </ui-select-choices> \
-          </ui-select> \
-          '
-      );
+          var el = compileTemplate(
+              '<ui-select multiple ng-model="selection.selectedMultiple" theme="bootstrap" style="width: 800px;"> \
+                  <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
+                  <ui-select-choices repeat="person.email as person in people | filter: $select.search"> \
+                    <div ng-bind-html="person.name | highlight: $select.search"></div> \
+                    <div ng-bind-html="person.email | highlight: $select.search"></div> \
+                  </ui-select-choices> \
+              </ui-select> \
+              '
+          );
 
-      var el2 = compileTemplate('<span class="resultDiv" ng-bind="selection.selectedMultiple"></span>');
+          var el2 = compileTemplate('<span class="resultDiv" ng-bind="selection.selectedMultiple"></span>');
 
-      expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
-        .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>");
+          expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
+              .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>");
 
-      clickItem(el, 'Nicole');
+          clickItem(el, 'Nicole');
 
-      expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
-        .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>Nicole <nicole@email.com>");
+          expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
+              .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>Nicole <nicole@email.com>");
 
-      expect(scope.selection.selectedMultiple.length).toBe(3);
+          expect(scope.selection.selectedMultiple.length).toBe(3);
 
-    });
+      });
+
+      it('should ensure the multiple selection limit is respected', function () {
+
+          scope.selection.selectedMultiple = ['wladimir@email.com'];
+
+          var el = compileTemplate(
+              '<ui-select multiple limit="2" ng-model="selection.selectedMultiple" theme="bootstrap" style="width: 800px;"> \
+                  <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
+                  <ui-select-choices repeat="person.email as person in people | filter: $select.search"> \
+                    <div ng-bind-html="person.name | highlight: $select.search"></div> \
+                    <div ng-bind-html="person.email | highlight: $select.search"></div> \
+                  </ui-select-choices> \
+              </ui-select> \
+              '
+          );
+
+          var el2 = compileTemplate('<span class="resultDiv" ng-bind="selection.selectedMultiple"></span>');
+
+          expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
+              .toBe("Wladimir <wladimir@email.com>");
+
+          clickItem(el, 'Samantha');
+          expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
+              .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>");
+
+          clickItem(el, 'Nicole');
+
+          expect(el.find('.ui-select-match-item [uis-transclude-append]:not(.ng-hide)').text())
+              .toBe("Wladimir <wladimir@email.com>Samantha <samantha@email.com>");
+
+          expect(scope.selection.selectedMultiple.length).toBe(2);
+
+      });
 
     it('should change viewvalue only once when updating modelvalue', function () {
 
@@ -1674,7 +2076,7 @@ describe('ui-select tests', function() {
       scope.counter = 0;
       scope.onlyOnce = function(){
         scope.counter++;
-      }
+      };
 
       clickItem(el, 'Nicole');
 
@@ -1727,20 +2129,39 @@ describe('ui-select tests', function() {
     });
 
     it('should allow paste tag from clipboard', function() {
-       scope.taggingFunc = function (name) {
-         return {
-           name: name,
-           email: name + '@email.com',
-           group: 'Foo',
-           age: 12
-         };
-       };
+      scope.taggingFunc = function (name) {
+        return {
+          name: name,
+          email: name + '@email.com',
+          group: 'Foo',
+          age: 12
+        };
+      };
 
-       var el = createUiSelectMultiple({tagging: 'taggingFunc', taggingTokens: ",|ENTER"});
-       clickMatch(el);
-       triggerPaste(el.find('input'), 'tag1');
+      var el = createUiSelectMultiple({tagging: 'taggingFunc', taggingTokens: ",|ENTER"});
+      clickMatch(el);
+      triggerPaste(el.find('input'), 'tag1');
 
-       expect($(el).scope().$select.selected.length).toBe(1);
+      expect($(el).scope().$select.selected.length).toBe(1);
+      expect($(el).scope().$select.selected[0].name).toBe('tag1');
+    });
+
+    it('should allow paste tag from clipboard for generic ClipboardEvent', function() {
+      scope.taggingFunc = function (name) {
+        return {
+          name: name,
+          email: name + '@email.com',
+          group: 'Foo',
+          age: 12
+        };
+      };
+
+      var el = createUiSelectMultiple({tagging: 'taggingFunc', taggingTokens: ",|ENTER"});
+      clickMatch(el);
+      triggerPaste(el.find('input'), 'tag1', true);
+
+      expect($(el).scope().$select.selected.length).toBe(1);
+      expect($(el).scope().$select.selected[0].name).toBe('tag1');
     });
 
     it('should allow paste multiple tags', function() {
@@ -1759,6 +2180,53 @@ describe('ui-select tests', function() {
 
       expect($(el).scope().$select.selected.length).toBe(5);
     });
+
+    it('should allow paste multiple tags with generic ClipboardEvent', function() {
+      scope.taggingFunc = function (name) {
+        return {
+          name: name,
+          email: name + '@email.com',
+          group: 'Foo',
+          age: 12
+        };
+      };
+
+      var el = createUiSelectMultiple({tagging: 'taggingFunc', taggingTokens: ",|ENTER"});
+      clickMatch(el);
+      triggerPaste(el.find('input'), ',tag1,tag2,tag3,,tag5,', true);
+
+      expect($(el).scope().$select.selected.length).toBe(5);
+    });
+
+    it('should split pastes on ENTER (and with undefined tagging function)', function() {
+      var el = createUiSelectMultiple({tagging: true, taggingTokens: "ENTER|,"});
+      clickMatch(el);
+      triggerPaste(el.find('input'), "tag1\ntag2\ntag3");
+
+      expect($(el).scope().$select.selected.length).toBe(3);
+    });
+
+    it('should split pastes on TAB', function() {
+      var el = createUiSelectMultiple({tagging: true, taggingTokens: "TAB|,"});
+      clickMatch(el);
+      triggerPaste(el.find('input'), "tag1\ttag2\ttag3");
+
+      expect($(el).scope().$select.selected.length).toBe(3);
+    });
+
+    it('should add an id to the search input field', function () {
+      var el = createUiSelectMultiple({inputId: 'inid'});
+      var searchEl = $(el).find('input.ui-select-search');
+      expect(searchEl.length).toEqual(1);
+      expect(searchEl[0].id).toEqual('inid');
+    });
+  });
+
+  it('should add an id to the search input field', function () {
+    var el = createUiSelect({inputId: 'inid'});
+    var searchEl = $(el).find('input.ui-select-search');
+    expect(searchEl.length).toEqual(1);
+    expect(searchEl[0].id).toEqual('inid');
   });
 
   describe('default configuration via uiSelectConfig', function() {
@@ -1843,7 +2311,7 @@ describe('ui-select tests', function() {
         function checkElements(els) {
           for (var i = 0; i < els.length; i++) {
             expect(els[i].attributes['aria-label']).toBeTruthy();
-          };
+          }
         }
       }
     });
@@ -1901,6 +2369,42 @@ describe('ui-select tests', function() {
       expect(el.css('top')).toBe(originalTop);
       expect(el.css('left')).toBe(originalLeft);
       expect(el.css('width')).toBe(originalWidth);
+    });
+  });
+
+  describe('highlight filter', function() {
+    var highlight;
+
+    beforeEach(function() {
+      highlight = $injector.get('highlightFilter');
+    });
+
+    it('returns the item if there is no match', function() {
+      var query = 'January';
+      var item = 'December';
+
+      expect(highlight(item, query)).toBe('December');
+    });
+
+    it('wraps search strings matches in ui-select-highlight class', function() {
+      var query = 'er';
+      var item = 'December';
+
+      expect(highlight(item, query)).toBe('Decemb<span class="ui-select-highlight">er</span>');
+    });
+
+    it('properly highlights numeric items', function() {
+      var query = '15';
+      var item = 2015;
+
+      expect(highlight(item, query)).toBe('20<span class="ui-select-highlight">15</span>');
+    });
+
+    it('properly works with numeric queries', function() {
+      var query = 15;
+      var item = 2015;
+
+      expect(highlight(item, query)).toBe('20<span class="ui-select-highlight">15</span>');
     });
   });
 
