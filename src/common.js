@@ -31,7 +31,7 @@ var KEY = {
             return true;
         }
 
-        if (e.metaKey) return true;
+        if (e.metaKey || e.ctrlKey || e.altKey) return true;
 
         return false;
     },
@@ -53,6 +53,10 @@ var KEY = {
       return KEY[k] ? undefined : k;
     }
   };
+
+function isNil(value) {
+  return angular.isUndefined(value) || value === null;
+}
 
 /**
  * Add querySelectorAll() to jqLite.
@@ -99,11 +103,17 @@ var uis = angular.module('ui.select', [])
   placeholder: '', // Empty by default, like HTML tag <select>
   refreshDelay: 1000, // In milliseconds
   closeOnSelect: true,
+  skipFocusser: false,
   dropdownPosition: 'auto',
+  removeSelected: true,
+  resetSearchInput: true,
   generateId: function() {
     return latestId++;
   },
-  appendToBody: false
+  appendToBody: false,
+  spinnerEnabled: false,
+  spinnerClass: 'glyphicon glyphicon-refresh ui-select-spin',
+  backspaceReset: true
 })
 
 // See Rename minErr and make it accessible from outside https://github.com/angular/angular.js/issues/6913
